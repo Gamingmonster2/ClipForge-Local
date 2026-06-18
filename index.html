@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -238,6 +239,12 @@
                     <!-- Standard HTML5 Video Player -->
                     <video id="preview-player" controls class="w-full h-full object-contain hidden"></video>
 
+                    <!-- Processed Badge / وسم حالة المعالجة -->
+                    <div id="processed-badge" class="absolute top-3 left-3 bg-emerald-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-md hidden flex items-center gap-1.5 shadow-lg z-10 animate-pulse">
+                        <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                        <span>تمت المعالجة: يمكنك الآن المشاهدة أو التحميل</span>
+                    </div>
+
                     <!-- Placeholder when no video is loaded -->
                     <div id="player-placeholder" class="text-center p-6 space-y-3">
                         <div class="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-theme">
@@ -309,7 +316,7 @@
                     </div>
                     <div class="space-y-1">
                         <h4 class="text-sm font-bold">الملف الجاهز للتصدير</h4>
-                        <p class="text-[11px] text-muted">سيظهر رابط التحميل المباشر هنا فور اكتمال المعالجة</p>
+                        <p class="text-[11px] text-muted" id="download-status-text">سيظهر رابط التحميل المباشر هنا فور اكتمال المعالجة</p>
                     </div>
                     <a id="download-btn" href="#" download="clipforge_output.mp4" class="block w-full py-2.5 px-4 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-all pointer-events-none opacity-50">
                         تحميل الفيديو النهائي MP4
@@ -440,6 +447,7 @@ const data = ffmpeg.FS('readFile', 'output.mp4');
         const previewPlayer = document.getElementById('preview-player');
         const playerPlaceholder = document.getElementById('player-placeholder');
         const videoInfoBadge = document.getElementById('video-info-badge');
+        const processedBadge = document.getElementById('processed-badge');
 
         // Video Input Change
         videoInput.addEventListener('change', function(e) {
@@ -448,6 +456,9 @@ const data = ffmpeg.FS('readFile', 'output.mp4');
                 videoFileNameText.innerText = `${videoFile.name} (${(videoFile.size / (1024 * 1024)).toFixed(2)} MB)`;
                 videoFileNameText.classList.add('text-[var(--primary)]', 'font-semibold');
                 
+                // Hide processed badge on new upload
+                processedBadge.classList.add('hidden');
+
                 // Set video preview source
                 const fileURL = URL.createObjectURL(videoFile);
                 previewPlayer.src = fileURL;
@@ -473,6 +484,9 @@ const data = ffmpeg.FS('readFile', 'output.mp4');
                 audioFileNameText.innerText = `${audioFile.name} (${(audioFile.size / (1024 * 1024)).toFixed(2)} MB)`;
                 audioFileNameText.classList.add('text-[var(--primary)]', 'font-semibold');
                 
+                // Hide processed badge on new upload
+                processedBadge.classList.add('hidden');
+
                 addLog(`[ملف] تم تحميل ملف الصوت بنجاح: ${audioFile.name}`);
                 checkInputs();
             }
@@ -520,6 +534,9 @@ const data = ffmpeg.FS('readFile', 'output.mp4');
         function startProcessing() {
             if (!videoFile || !audioFile) return;
 
+            // Hide processed badge at start of new processing
+            processedBadge.classList.add('hidden');
+
             // Reset UI for processing
             const processBtn = document.getElementById('process-btn');
             const progressBar = document.getElementById('progress-bar');
@@ -528,12 +545,19 @@ const data = ffmpeg.FS('readFile', 'output.mp4');
             const downloadBox = document.getElementById('download-box');
             const downloadBtn = document.getElementById('download-btn');
             const downloadIcon = document.getElementById('download-icon');
+            const downloadStatusText = document.getElementById('download-status-text');
 
             processBtn.disabled = true;
             processBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            
+            // Keep download button disabled and hidden/muted during processing
             downloadBox.classList.add('opacity-50');
             downloadBtn.classList.add('pointer-events-none', 'opacity-50');
+            downloadBtn.classList.remove('bg-[var(--primary)]', 'hover:bg-[var(--primary-hover)]');
+            downloadIcon.classList.add('text-muted');
+            downloadIcon.classList.remove('animate-bounce');
             downloadBtn.removeAttribute('href');
+            downloadStatusText.innerText = 'جاري المعالجة... يرجى الانتظار';
 
             let progress = 0;
             let elapsedSeconds = 0;
@@ -582,18 +606,34 @@ const data = ffmpeg.FS('readFile', 'output.mp4');
                                     progress = 100;
                                     updateProgress(progress, 'اكتملت المعالجة بنجاح!');
                                     addLog('[FFmpeg] تم إنشاء ملف output.mp4 بنجاح وبدون أخطاء.');
-                                    addLog('[نظام] الملف جاهز الآن للتحميل المباشر.');
+                                    addLog('[نظام] جاري تحميل المعاينة للمشغل...');
                                     clearInterval(timerInterval);
 
-                                    // Enable Download UI
-                                    downloadBox.classList.remove('opacity-50');
-                                    downloadBtn.classList.remove('pointer-events-none', 'opacity-50');
-                                    downloadBtn.classList.add('bg-[var(--primary)]', 'hover:bg-[var(--primary-hover)]');
-                                    downloadIcon.classList.remove('text-muted');
-                                    downloadIcon.classList.add('text-[var(--primary)]', 'animate-bounce');
+                                    // Create processed URL (using the uploaded video file as mock output)
+                                    const processedURL = URL.createObjectURL(videoFile);
+
+                                    // Update preview player source with processed video
+                                    previewPlayer.src = processedURL;
                                     
-                                    // Set mock/real download source (using the uploaded video file as mock output)
-                                    downloadBtn.href = URL.createObjectURL(videoFile);
+                                    // Wait until the preview player can play the new video before enabling download
+                                    previewPlayer.oncanplay = function() {
+                                        // Enable Download UI
+                                        downloadBox.classList.remove('opacity-50');
+                                        downloadBtn.classList.remove('pointer-events-none', 'opacity-50');
+                                        downloadBtn.classList.add('bg-[var(--primary)]', 'hover:bg-[var(--primary-hover)]');
+                                        downloadIcon.classList.remove('text-muted');
+                                        downloadIcon.classList.add('text-[var(--primary)]', 'animate-bounce');
+                                        downloadBtn.href = processedURL;
+                                        downloadStatusText.innerText = 'الملف المعالج جاهز للتحميل الآن!';
+
+                                        // Show the processed badge on the video player
+                                        processedBadge.classList.remove('hidden');
+                                        
+                                        addLog('[نظام] تم تحميل المعاينة بنجاح. الملف جاهز الآن للمشاهدة والتحميل.');
+
+                                        // Clean up handler
+                                        previewPlayer.oncanplay = null;
+                                    };
 
                                     // Re-enable process button
                                     processBtn.disabled = false;
